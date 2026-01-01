@@ -134,15 +134,15 @@ jobs:
         run: |
           npm install node-appwrite
           node -e "
-          const sdk = require('node-appwrite');
+          const { Client, Storage, ID, InputFile } = require('node-appwrite');
           const fs = require('fs');
           
-          const client = new sdk.Client()
+          const client = new Client()
             .setEndpoint(process.env.APPWRITE_ENDPOINT)
             .setProject(process.env.APPWRITE_PROJECT_ID)
             .setKey(process.env.APPWRITE_API_KEY);
           
-          const storage = new sdk.Storage(client);
+          const storage = new Storage(client);
           
           async function upload() {
             const apkFile = fs.readdirSync('.').find(f => f.endsWith('.apk'));
@@ -151,15 +151,15 @@ jobs:
             // Upload APK
             const apkResult = await storage.createFile(
               process.env.APPWRITE_BUCKET_ID,
-              sdk.ID.unique(),
-              sdk.InputFile.fromPath(apkFile, apkFile)
+              ID.unique(),
+              InputFile.fromPath(apkFile, apkFile)
             );
             
             // Upload AAB
             const aabResult = await storage.createFile(
               process.env.APPWRITE_BUCKET_ID,
-              sdk.ID.unique(),
-              sdk.InputFile.fromPath(aabFile, aabFile)
+              ID.unique(),
+              InputFile.fromPath(aabFile, aabFile)
             );
             
             console.log('APK_FILE_ID=' + apkResult.\$id);
