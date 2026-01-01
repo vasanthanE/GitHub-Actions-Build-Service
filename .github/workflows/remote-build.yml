@@ -1,0 +1,185 @@
+name: Remote Build Service
+
+on:
+  repository_dispatch:
+    types: [remote-build]
+  workflow_dispatch:
+    inputs:
+      source_url:
+        description: 'Source code archive URL (Appwrite Storage or direct URL)'
+        required: true
+      build_id:
+        description: 'Unique build identifier'
+        required: true
+      callback_url:
+        description: 'Optional webhook URL to notify when build completes'
+        required: false
+
+jobs:
+  remote-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Extract build info
+        id: build_info
+        run: |
+          # Handle both workflow_dispatch and repository_dispatch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SOURCE_URL="${{ github.event.inputs.source_url }}"
+            BUILD_ID="${{ github.event.inputs.build_id }}"
+            CALLBACK_URL="${{ github.event.inputs.callback_url }}"
+          else
+            SOURCE_URL="${{ github.event.client_payload.source_url }}"
+            BUILD_ID="${{ github.event.client_payload.build_id }}"
+            CALLBACK_URL="${{ github.event.client_payload.callback_url }}"
+          fi
+          
+          echo "SOURCE_URL=$SOURCE_URL" >> $GITHUB_OUTPUT
+          echo "BUILD_ID=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "CALLBACK_URL=$CALLBACK_URL" >> $GITHUB_OUTPUT
+          echo "BUILD_NUMBER=$(date +%s)" >> $GITHUB_OUTPUT
+
+      - name: Download source code
+        run: |
+          echo "Downloading source from: ${{ steps.build_info.outputs.SOURCE_URL }}"
+          curl -L -o source.tar.gz "${{ steps.build_info.outputs.SOURCE_URL }}"
+          mkdir -p project
+          tar -xzf source.tar.gz -C project --strip-components=1
+          ls -la project
+
+      - name: Install dependencies
+        working-directory: project
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          elif [ -f "yarn.lock" ]; then
+            yarn install --frozen-lockfile
+          else
+            npm install
+          fi
+
+      - name: Create .env file (if secrets provided)
+        working-directory: project
+        run: |
+          if [ -n "${{ secrets.APPWRITE_ENDPOINT }}" ]; then
+            cat > .env << EOF
+          APPWRITE_ENDPOINT=${{ secrets.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID=${{ secrets.APPWRITE_PROJECT_ID }}
+          APPWRITE_DATABASE_ID=${{ secrets.APPWRITE_DATABASE_ID }}
+          APPWRITE_COLLECTION_ID=${{ secrets.APPWRITE_COLLECTION_ID }}
+          APPWRITE_BUCKET_ID=${{ secrets.APPWRITE_BUCKET_ID }}
+          EOF
+          fi
+
+      - name: Expo prebuild
+        working-directory: project
+        run: npx expo prebuild --platform android --clean
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build Android APK
+        working-directory: project/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Build Android AAB
+        working-directory: project/android
+        run: ./gradlew bundleRelease --no-daemon
+
+      - name: Rename artifacts
+        run: |
+          BUILD_ID="${{ steps.build_info.outputs.BUILD_ID }}"
+          BUILD_NUM="${{ steps.build_info.outputs.BUILD_NUMBER }}"
+          
+          # Find and rename APK
+          APK_PATH=$(find project/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          cp "$APK_PATH" "build-${BUILD_ID}-${BUILD_NUM}.apk"
+          
+          # Find and rename AAB
+          AAB_PATH=$(find project/android/app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+          cp "$AAB_PATH" "build-${BUILD_ID}-${BUILD_NUM}.aab"
+
+      - name: Upload to Appwrite Storage
+        id: upload
+        env:
+          APPWRITE_ENDPOINT: ${{ secrets.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ secrets.APPWRITE_PROJECT_ID }}
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+          APPWRITE_BUCKET_ID: ${{ secrets.APPWRITE_BUCKET_ID }}
+          BUILD_ID: ${{ steps.build_info.outputs.BUILD_ID }}
+          BUILD_NUM: ${{ steps.build_info.outputs.BUILD_NUMBER }}
+        run: |
+          npm install node-appwrite
+          node -e "
+          const sdk = require('node-appwrite');
+          const fs = require('fs');
+          
+          const client = new sdk.Client()
+            .setEndpoint(process.env.APPWRITE_ENDPOINT)
+            .setProject(process.env.APPWRITE_PROJECT_ID)
+            .setKey(process.env.APPWRITE_API_KEY);
+          
+          const storage = new sdk.Storage(client);
+          
+          async function upload() {
+            const apkFile = fs.readdirSync('.').find(f => f.endsWith('.apk'));
+            const aabFile = fs.readdirSync('.').find(f => f.endsWith('.aab'));
+            
+            // Upload APK
+            const apkResult = await storage.createFile(
+              process.env.APPWRITE_BUCKET_ID,
+              sdk.ID.unique(),
+              sdk.InputFile.fromPath(apkFile, apkFile)
+            );
+            
+            // Upload AAB
+            const aabResult = await storage.createFile(
+              process.env.APPWRITE_BUCKET_ID,
+              sdk.ID.unique(),
+              sdk.InputFile.fromPath(aabFile, aabFile)
+            );
+            
+            console.log('APK_FILE_ID=' + apkResult.\$id);
+            console.log('AAB_FILE_ID=' + aabResult.\$id);
+            console.log('APK_URL=' + process.env.APPWRITE_ENDPOINT + '/storage/buckets/' + process.env.APPWRITE_BUCKET_ID + '/files/' + apkResult.\$id + '/view');
+          }
+          
+          upload().catch(console.error);
+          " | tee -a $GITHUB_OUTPUT
+
+      - name: Send callback notification
+        if: steps.build_info.outputs.CALLBACK_URL != ''
+        run: |
+          curl -X POST "${{ steps.build_info.outputs.CALLBACK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "build_id": "${{ steps.build_info.outputs.BUILD_ID }}",
+              "status": "success",
+              "apk_file_id": "${{ steps.upload.outputs.APK_FILE_ID }}",
+              "aab_file_id": "${{ steps.upload.outputs.AAB_FILE_ID }}",
+              "apk_url": "${{ steps.upload.outputs.APK_URL }}",
+              "build_number": "${{ steps.build_info.outputs.BUILD_NUMBER }}"
+            }'
+
+      - name: Upload artifacts to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-build-${{ steps.build_info.outputs.BUILD_ID }}
+          path: |
+            *.apk
+            *.aab
+          retention-days: 7

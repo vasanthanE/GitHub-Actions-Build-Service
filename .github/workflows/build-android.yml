@@ -1,0 +1,123 @@
+name: Build Android APK and Upload to Appwrite
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate build number
+        id: build_number
+        run: echo "BUILD_NUMBER=$(date +%s)" >> $GITHUB_OUTPUT
+
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          APPWRITE_ENDPOINT=${{ secrets.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID=${{ secrets.APPWRITE_PROJECT_ID }}
+          APPWRITE_DATABASE_ID=${{ secrets.APPWRITE_DATABASE_ID }}
+          APPWRITE_COLLECTION_ID=${{ secrets.APPWRITE_COLLECTION_ID }}
+          APPWRITE_BUCKET_ID=${{ secrets.APPWRITE_BUCKET_ID }}
+          EOF
+
+      - name: Expo prebuild (generate native code)
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build Android APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Build Android AAB (for Play Store)
+        working-directory: android
+        run: ./gradlew bundleRelease --no-daemon
+
+      - name: Rename artifacts
+        run: |
+          BUILD_NUM="${{ steps.build_number.outputs.BUILD_NUMBER }}"
+          COMMIT_SHA="${{ github.sha }}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          
+          # Find and rename APK
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          cp "$APK_PATH" "VarSys-DocsStore-${SHORT_SHA}-${BUILD_NUM}.apk"
+          
+          # Find and rename AAB
+          AAB_PATH=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+          cp "$AAB_PATH" "VarSys-DocsStore-${SHORT_SHA}-${BUILD_NUM}.aab"
+
+      - name: Upload to Appwrite Storage
+        env:
+          APPWRITE_ENDPOINT: ${{ secrets.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ secrets.APPWRITE_PROJECT_ID }}
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+          APPWRITE_BUCKET_ID: ${{ secrets.APPWRITE_BUCKET_ID }}
+        run: node .github/scripts/upload-to-appwrite.js
+
+      - name: Upload APK as GitHub artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ steps.build_number.outputs.BUILD_NUMBER }}
+          path: "*.apk"
+          retention-days: 30
+
+      - name: Upload AAB as GitHub artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aab-${{ steps.build_number.outputs.BUILD_NUMBER }}
+          path: "*.aab"
+          retention-days: 30
+
+      - name: Create GitHub Release (on main branch only)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.${{ steps.build_number.outputs.BUILD_NUMBER }}
+          name: Release v1.0.${{ steps.build_number.outputs.BUILD_NUMBER }}
+          files: |
+            *.apk
+            *.aab
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on PR with download links
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const apkFile = fs.readdirSync('.').find(f => f.endsWith('.apk'));
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `✅ **Build completed successfully!**\n\n📦 APK: \`${apkFile}\`\n\n[Download from Actions artifacts](${context.payload.pull_request.html_url}/checks)`
+            });

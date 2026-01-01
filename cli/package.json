@@ -1,0 +1,27 @@
+{
+  "name": "@yourcompany/build-service-cli",
+  "version": "1.0.0",
+  "description": "CLI tool for remote Expo/React Native builds using GitHub Actions",
+  "main": "build-service.js",
+  "bin": {
+    "build-service": "./build-service.js"
+  },
+  "scripts": {
+    "test": "echo \"No tests yet\""
+  },
+  "keywords": [
+    "expo",
+    "react-native",
+    "build",
+    "ci",
+    "github-actions"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "commander": "^11.1.0",
+    "node-appwrite": "^12.0.0",
+    "tar": "^6.2.0"
+  }
+}
