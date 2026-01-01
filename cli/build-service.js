@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { program } = require('commander');
-const { Client, Storage, ID } = require('node-appwrite');
+const { Client, Storage, ID, InputFile } = require('node-appwrite');
 const fs = require('fs');
 const path = require('path');
 const tar = require('tar');
@@ -103,7 +103,7 @@ program
       const file = await storage.createFile(
         config.appwriteBucket,
         ID.unique(),
-        fs.createReadStream(archivePath)
+        InputFile.fromPath(archivePath, 'project.tar.gz')
       );
       
       console.log('✅ Uploaded:', file.$id);

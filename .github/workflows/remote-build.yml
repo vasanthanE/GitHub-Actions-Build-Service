@@ -54,9 +54,18 @@ jobs:
           echo "BUILD_NUMBER=$(date +%s)" >> $GITHUB_OUTPUT
 
       - name: Download source code
+        env:
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
         run: |
           echo "Downloading source from: ${{ steps.build_info.outputs.SOURCE_URL }}"
-          curl -L -o source.tar.gz "${{ steps.build_info.outputs.SOURCE_URL }}"
+          curl -L -o source.tar.gz \
+            -H "X-Appwrite-Project: ${{ secrets.APPWRITE_PROJECT_ID }}" \
+            -H "X-Appwrite-Key: $APPWRITE_API_KEY" \
+            "${{ steps.build_info.outputs.SOURCE_URL }}"
+          
+          echo "Verifying download..."
+          file source.tar.gz
+          
           mkdir -p project
           tar -xzf source.tar.gz -C project --strip-components=1
           ls -la project
