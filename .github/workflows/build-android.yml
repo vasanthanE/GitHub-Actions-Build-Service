@@ -1,11 +1,7 @@
 name: Build Android APK and Upload to Appwrite
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
-  workflow_dispatch: # Manual trigger
+  workflow_dispatch: # Manual trigger only - use CLI for automated builds
 
 jobs:
   build:
