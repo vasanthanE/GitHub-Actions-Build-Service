@@ -37,14 +37,14 @@ program
   .option('--github-repo <repo>', 'GitHub repository (owner/repo)')
   .action((options) => {
     loadConfig();
-    
+
     if (options.appwriteEndpoint) config.appwriteEndpoint = options.appwriteEndpoint;
     if (options.appwriteProject) config.appwriteProject = options.appwriteProject;
     if (options.appwriteKey) config.appwriteKey = options.appwriteKey;
     if (options.appwriteBucket) config.appwriteBucket = options.appwriteBucket;
     if (options.githubToken) config.githubToken = options.githubToken;
     if (options.githubRepo) config.githubRepo = options.githubRepo;
-    
+
     saveConfig();
     console.log('✅ Configuration saved to', CONFIG_PATH);
   });
@@ -60,22 +60,22 @@ program
   .action(async (projectPath, options) => {
     try {
       loadConfig();
-      
+
       // Validate configuration
-      if (!config.appwriteEndpoint || !config.appwriteProject || !config.appwriteKey || 
-          !config.appwriteBucket || !config.githubToken || !config.githubRepo) {
+      if (!config.appwriteEndpoint || !config.appwriteProject || !config.appwriteKey ||
+        !config.appwriteBucket || !config.githubToken || !config.githubRepo) {
         console.error('❌ Missing configuration. Run: build-service configure --help');
         process.exit(1);
       }
-      
+
       console.log('📦 Packaging project...');
-      
+
       // Create temporary archive
       const buildId = Date.now().toString();
       const tempDir = path.join(os.tmpdir(), `build-service-${buildId}`);
       fs.mkdirSync(tempDir, { recursive: true });
       const archivePath = path.join(tempDir, 'project.tar.gz');
-      
+
       // Get all directories/files to include (exclude node_modules, .git, etc.)
       const entries = fs.readdirSync(projectPath, { withFileTypes: true })
         .filter(entry => {
@@ -83,9 +83,9 @@ program
           return !exclude.includes(entry.name);
         })
         .map(entry => entry.name);
-      
+
       console.log(`📁 Including: ${entries.join(', ')}`);
-      
+
       // Create tar.gz of project
       await tar.create(
         {
@@ -96,34 +96,34 @@ program
         },
         entries
       );
-      
+
       const stats = fs.statSync(archivePath);
       console.log(`📊 Archive size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
-      
+
       // Upload to Appwrite
       console.log('☁️  Uploading to Appwrite...');
       const client = new Client()
         .setEndpoint(config.appwriteEndpoint)
         .setProject(config.appwriteProject)
         .setKey(config.appwriteKey);
-      
+
       const storage = new Storage(client);
-      
+
       const file = await storage.createFile(
         config.appwriteBucket,
         ID.unique(),
         InputFile.fromPath(archivePath, 'project.tar.gz')
       );
-      
+
       console.log('✅ Uploaded:', file.$id);
-      
+
       // Generate download URL
       const sourceUrl = `${config.appwriteEndpoint}/storage/buckets/${config.appwriteBucket}/files/${file.$id}/download?project=${config.appwriteProject}`;
-      
+
       // Trigger GitHub Actions
       console.log('🚀 Triggering build...');
       const [owner, repo] = config.githubRepo.split('/');
-      
+
       await axios.post(
         `https://api.github.com/repos/${owner}/${repo}/dispatches`,
         {
@@ -142,19 +142,19 @@ program
           }
         }
       );
-      
+
       console.log('\n✅ Build started!');
       console.log(`🔗 Build ID: ${buildId}`);
       console.log(`🔗 GitHub Actions: https://github.com/${config.githubRepo}/actions`);
-      
+
       // Clean up
       fs.rmSync(tempDir, { recursive: true, force: true });
-      
+
       if (options.wait) {
         console.log('\n⏳ Waiting for build to complete...');
         console.log('(This feature requires webhook setup - check GitHub Actions manually for now)');
       }
-      
+
     } catch (error) {
       console.error('❌ Build failed:', error.message);
       if (error.response) {
