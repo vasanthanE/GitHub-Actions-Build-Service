@@ -42,7 +42,12 @@ build-service configure \
 
 ```bash
 cd /path/to/your/expo/project
-build-service build
+
+# Development build (with expo-dev-client)
+build-service build --profile development
+
+# Or production build
+build-service build --profile production
 ```
 
 ## 6. Check Results

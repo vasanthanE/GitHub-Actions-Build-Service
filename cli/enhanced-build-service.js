@@ -139,17 +139,33 @@ async function packageProject(projectPath, excludePatterns = []) {
     archive.on('error', (err) => reject(err));
     archive.pipe(output);
 
-    // Default excludes
-    const defaultExcludes = [
+    // Read .buildignore if exists
+    let buildIgnorePatterns = [];
+    const buildIgnorePath = path.join(projectPath, '.buildignore');
+    if (fs.existsSync(buildIgnorePath)) {
+      const buildIgnoreContent = fs.readFileSync(buildIgnorePath, 'utf8');
+      buildIgnorePatterns = buildIgnoreContent
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'))
+        .map(line => line.endsWith('/') ? line + '**' : line);
+      console.log(`📋 Using .buildignore (${buildIgnorePatterns.length} patterns)`);
+    }
+
+    // Default excludes if no .buildignore
+    const defaultExcludes = buildIgnorePatterns.length > 0 ? buildIgnorePatterns : [
       'node_modules/**',
       '.git/**',
-      'android/**',
-      'ios/**',
       '.expo/**',
       'dist/**',
       'build/**',
       '.vscode/**',
-      '*.log'
+      '*.log',
+      'android/app/build/**',
+      'android/.gradle/**',
+      'android/build/**',
+      'ios/build/**',
+      'ios/Pods/**'
     ];
 
     const allExcludes = [...defaultExcludes, ...excludePatterns];
@@ -298,11 +314,17 @@ if (command === 'build') {
 
   // Parse arguments
   for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--profile' || args[i] === '-p') {
+    if (args[i] === '--path' || args[i] === '-p') {
+      options.path = args[i + 1];
+      i++;
+    } else if (args[i] === '--profile' || args[i] === '--eas-profile') {
       options.profile = args[i + 1];
       i++;
-    } else if (args[i] === '--path') {
-      options.path = args[i + 1];
+    } else if (args[i] === '-a' || args[i] === '--app') {
+      // App name parameter (for compatibility)
+      i++;
+    } else if (args[i] === '-v' || args[i] === '--version') {
+      // Version parameter (for compatibility)
       i++;
     }
   }

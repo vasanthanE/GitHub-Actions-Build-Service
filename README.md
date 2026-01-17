@@ -4,12 +4,14 @@ Build your Expo and React Native apps remotely using GitHub Actions - **unlimite
 
 ## ✨ Features
 
+- � **EAS-Compatible** - Reads and uses your `eas.json` build profiles (development, preview, production)
 - 🆓 **Unlimited Builds** - No monthly limits like EAS (30 builds/month)
 - 📦 **Build from Anywhere** - Local machine, CI/CD, or any computer with Node.js
 - ⚡ **Fast Setup** - 5 minutes to get started
 - 🔒 **Secure** - Uses GitHub Actions and Appwrite for storage
 - 📱 **APK & AAB** - Generates both Android APK and AAB (Play Store) files
 - ☁️ **Cloud Storage** - Automatically uploads builds to Appwrite Storage
+- 🔄 **Auto Version Increment** - Supports autoIncrement from EAS profiles
 
 ## 📋 Prerequisites
 
@@ -105,8 +107,18 @@ Navigate to your Expo/React Native project and run:
 
 ```bash
 cd /path/to/your/expo-project
-build-service build
+
+# Development build (with expo-dev-client)
+build-service build --profile development
+
+# Preview build (internal distribution)
+build-service build --profile preview
+
+# Production build (release to stores)
+build-service build --profile production
 ```
+
+**The CLI automatically reads your `eas.json` configuration!**
 
 **Example output:**
 ```

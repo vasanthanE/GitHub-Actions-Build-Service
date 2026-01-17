@@ -6,7 +6,8 @@ A technical guide for developers integrating this remote build service into thei
 
 ```bash
 # 1. Install CLI globally
-npm install -g @yourcompany/build-service-cli
+cd GitHub-Actions-Build-Service/cli
+npm install -g .
 
 # 2. Configure once
 build-service configure \
@@ -17,9 +18,14 @@ build-service configure \
   --github-token YOUR_GITHUB_TOKEN \
   --github-repo username/GitHub-Actions-Build-Service
 
-# 3. Build from any Expo/RN project
+# 3. Build from any Expo/RN project with EAS profiles
 cd my-expo-app
-build-service build
+
+# Development build (with dev client)
+build-service build --profile development
+
+# Production build
+build-service build --profile production
 
 # Done! Check GitHub Actions for build status
 ```
@@ -49,11 +55,53 @@ build-service build
 │  2. Extract tar.gz                                    │
 │  3. npm install                                       │
 │  4. npx expo prebuild --platform android             │
-│  5. ./gradlew assembleRelease bundleRelease          │
+│  5. ./gradlew <gradleCommand> (from eas.json)        │
 │  6. Upload APK/AAB to Appwrite                       │
 │  7. Save as GitHub Artifacts                         │
 └──────────────────────────────────────────────────────┘
 ```
+
+## EAS Profile Support
+
+The build service reads your `eas.json` configuration and maps profiles to build settings:
+
+### Supported eas.json Fields
+
+```json
+{
+  "build": {
+    "development": {
+      "developmentClient": true,        // → debug variant
+      "distribution": "internal",       
+      "android": {
+        "buildType": "apk",             // → APK or AAB
+        "gradleCommand": ":app:assembleDebug"
+      }
+    },
+    "production": {
+      "autoIncrement": true,            // → Increment versionCode
+      "android": {
+        "buildType": "aab"              // → Google Play bundle
+      },
+      "env": {
+        "API_URL": "https://api.prod.com"  // → Passed to build
+      }
+    }
+  }
+}
+```
+
+### Profile Mapping
+
+| EAS Setting | Build Behavior |
+|-------------|----------------|
+| `developmentClient: true` | Uses `debug` variant, includes dev client |
+| `buildType: "apk"` | Generates APK file |
+| `buildType: "aab"` | Generates AAB (Play Store bundle) |
+| `autoIncrement: true` | Increments `versionCode` in app.json |
+| `gradleCommand` | Custom gradle command (e.g., `:app:assembleRelease`) |
+| `env` | Environment variables passed to build |
+| `distribution` | Metadata only (not enforced) |
 
 ## API Reference
 
@@ -89,15 +137,21 @@ build-service configure \
 }
 ```
 
-#### `build-service build [path]`
+#### `build-service build`
 
-Triggers a remote build.
+Triggers a remote build with EAS profile support.
 
 ```bash
-# Build current directory
-build-service build
+# Build with development profile (from eas.json)
+build-service build --profile development
 
-# Build specific project
+# Build with preview profile
+build-service build --profile preview
+
+# Build with production profile (default)
+build-service build --profile production
+
+# Build specific project path
 build-service build /path/to/project
 
 # Options

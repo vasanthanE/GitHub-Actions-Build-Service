@@ -1,10 +1,10 @@
 {
   "name": "@yourcompany/build-service-cli",
-  "version": "1.0.0",
-  "description": "CLI tool for remote Expo/React Native builds using GitHub Actions",
-  "main": "build-service.js",
+  "version": "2.0.0",
+  "description": "CLI tool for remote Expo/React Native builds using GitHub Actions with EAS profile support",
+  "main": "enhanced-build-service.js",
   "bin": {
-    "build-service": "./build-service.js"
+    "build-service": "./enhanced-build-service.js"
   },
   "scripts": {
     "test": "echo \"No tests yet\""

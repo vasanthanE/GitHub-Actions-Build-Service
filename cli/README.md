@@ -1,9 +1,10 @@
 # Remote Build Service CLI
 
-A CLI tool to build Expo/React Native apps remotely using GitHub Actions - like EAS but self-hosted and unlimited!
+A CLI tool to build Expo/React Native apps remotely using GitHub Actions - EAS-compatible profiles, self-hosted, and unlimited!
 
 ## 🚀 Features
 
+- ✅ **EAS Profile Support** - Reads eas.json build profiles (development, preview, production)
 - ✅ Build from anywhere (local machine, CI, etc.)
 - ✅ Unlimited builds (free GitHub Actions)
 - ✅ Automatic APK/AAB generation
