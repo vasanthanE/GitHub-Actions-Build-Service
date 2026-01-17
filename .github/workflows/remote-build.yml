@@ -78,6 +78,26 @@ jobs:
           echo "Contents of project directory:"
           ls -la project/
 
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            project/node_modules
+            ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('project/package-lock.json', 'project/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.android/sdk
+            ~/.android/avd
+          key: ${{ runner.os }}-android-sdk-${{ hashFiles('project/android/build.gradle', 'project/android/app/build.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-
+
       - name: Install dependencies
         working-directory: project
         run: |
@@ -106,8 +126,21 @@ jobs:
         working-directory: project
         run: npx expo prebuild --platform android --clean
 
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            project/android/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('project/android/gradle/wrapper/gradle-wrapper.properties', 'project/android/build.gradle', 'project/android/app/build.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
 
       - name: Build Android APK
         working-directory: project/android
